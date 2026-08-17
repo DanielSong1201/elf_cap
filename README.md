@@ -35,6 +35,75 @@ python scripts/check_audiocaps.py \
   --skip-wav-header-check
 ```
 
+## Build AudioCaps manifests
+
+The manifest builder treats the CVSSP bundle as the WAV source and skips
+individual rows/audio files that cannot form a valid pair. It writes one JSON
+object per audio file and aggregates all valid reference captions for that
+audio. Source split `val` is written as `eval.jsonl`.
+
+If the CSV files inside the CVSSP split directories are the intended caption
+source, run:
+
+```bash
+python scripts/build_audiocaps_manifests.py \
+  --audio-root data/AudioCaps_CVSSP \
+  --output-dir outputs/manifests/audiocaps_cvssp
+```
+
+To use CVSSP only as the audio cache and use official AudioCaps v1 captions
+(recommended for reproducing the original AudioCaps benchmark), first clone
+the official metadata repository and point `--metadata-root` to its `dataset`
+directory:
+
+```bash
+git clone https://github.com/cdjkim/audiocaps.git /tmp/audiocaps_metadata
+
+python scripts/build_audiocaps_manifests.py \
+  --audio-root data/AudioCaps_CVSSP \
+  --metadata-root /tmp/audiocaps_metadata/dataset \
+  --output-dir outputs/manifests/audiocaps_v1
+```
+
+The output directory contains:
+
+```text
+train.jsonl
+eval.jsonl
+test.jsonl
+summary.json
+```
+
+Each JSONL record has the following form:
+
+```json
+{
+  "split": "eval",
+  "source_split": "val",
+  "audio_id": "Yabc123",
+  "youtube_id": "abc123",
+  "start_time": 10,
+  "audio_path": "data/AudioCaps_CVSSP/val/Yabc123.wav",
+  "captions": ["A dog barks.", "A dog is barking nearby."],
+  "num_captions": 2,
+  "audiocap_ids": ["123", "124"]
+}
+```
+
+By default, audio paths are relative to the directory from which the script is
+run. Use `--absolute-audio-paths` if the manifests will only be consumed on the
+same server. WAV headers are checked by default. The builder skips empty
+captions, missing WAV files, invalid WAV files, duplicate captions, and IDs
+whose multiple start times cannot be represented by the `Y<youtube_id>.wav`
+filename. Counts and examples for every skipped category are saved in
+`summary.json`.
+
+Run the standard-library tests locally with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ## Reference code and papers
 
 The sibling `../elf_torch/` checkout and `../papers/` directory are reference

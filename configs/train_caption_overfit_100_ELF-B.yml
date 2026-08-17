@@ -57,7 +57,9 @@ weight_decay: 0.0
 adam_b1: 0.9
 adam_b2: 0.95
 
-ema_decay1: 0.9999
+# A short 1,000-step sanity run needs a responsive EMA. With 0.9999, about
+# 90.5% of the initial OpenWebText EMA remains after all 1,000 steps.
+ema_decay1: 0.99
 
 sampling_configs_path: configs/sampling_caption_overfit.yml
 num_samples: 100

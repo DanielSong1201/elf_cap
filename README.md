@@ -214,19 +214,22 @@ The workflow:
 6. captures the training log and analyzes all generated checkpoints against
    the 100 training captions.
 
+The short sanity run uses `ema_decay1=0.99`. A value of `0.9999` leaves about
+90.5% of the initial OpenWebText EMA after only 1,000 updates and therefore
+does not evaluate the newly adapted model faithfully.
+
 Useful server overrides include:
 
 ```bash
 NUM_WORKERS=16 bash scripts/run_caption_overfit_100.sh
 
-EPOCHS=200 GLOBAL_BATCH_SIZE=10 \
-  bash scripts/run_caption_overfit_100.sh
+EPOCHS=200 GLOBAL_BATCH_SIZE=10 EMA_DECAY=0.99 bash scripts/run_caption_overfit_100.sh
 ```
 
 The default outputs are:
 
 ```text
-outputs/experiments/elf_caption_overfit_100/
+outputs/experiments/elf_caption_overfit_100_ema099/
 ├── data/
 │   ├── train/
 │   ├── references.jsonl
@@ -250,6 +253,11 @@ mixing checkpoints:
 EXPERIMENT_ROOT=outputs/experiments/elf_caption_overfit_100_seed2 \
   bash scripts/run_caption_overfit_100.sh
 ```
+
+The launcher builds every command as a Bash argument array. Do not copy the
+rendered multi-line Python invocation out of the script: a missing continuation
+backslash would make Bash execute a path fragment such as `data/train` as a
+separate command. Use the launcher and environment variables above instead.
 
 The lexical analysis reports non-empty rate, unique ratio, exact training-text
 match rate, training-caption coverage, nearest-reference similarity, length,

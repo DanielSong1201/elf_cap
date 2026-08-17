@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,6 +82,55 @@ class CaptionOverfitExperimentTest(unittest.TestCase):
             self.assertEqual(result["points"], 2)
             self.assertEqual(result["last"]["step"], 20)
             self.assertEqual(result["minimum_loss"]["loss"], 1.25)
+
+    def test_launcher_keeps_path_overrides_as_single_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_python = fake_bin / "python"
+            fake_python.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *"build_caption_overfit_subset.py"* ]]; then
+    output=""
+    while [[ $# -gt 0 ]]; do
+        if [[ "$1" == "--output-dir" ]]; then
+            output=$2
+            break
+        fi
+        shift
+    done
+    mkdir -p "${output}/train"
+    : > "${output}/train/dataset_info.json"
+    : > "${output}/references.jsonl"
+fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            experiment_root = root / "experiment with spaces"
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "PATH": f"{fake_bin}:{environment['PATH']}",
+                    "EXPERIMENT_ROOT": str(experiment_root),
+                    "SOURCE_DATA": str(root / "source data"),
+                    "EMA_DECAY": "0.99",
+                }
+            )
+            result = subprocess.run(
+                ["bash", str(REPO_ROOT / "scripts" / "run_caption_overfit_100.sh")],
+                cwd=REPO_ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("No such file or directory", result.stderr)
+            self.assertIn(str(experiment_root / "data" / "train"), result.stdout)
 
 
 if __name__ == "__main__":

@@ -155,7 +155,9 @@ Each valid reference caption becomes one example. Captions are whitespace
 normalized, but not lowercased or otherwise rewritten. Empty/non-string and
 within-audio duplicate captions are skipped and reported in `summary.json`.
 The tokenized datasets contain variable-length `input_ids` with T5 EOS and no
-padding; ELF pads dynamically in its dataloader.
+padding; ELF pads dynamically in its dataloader. The upstream fixed-length
+OpenWebText recipe does not require special tokens, but this project adds EOS
+deliberately so the short-caption adaptation can learn where generation ends.
 
 The resulting paths can be used in an ELF training config as:
 
@@ -175,3 +177,81 @@ caption-expansion check; that mode does not produce ELF-ready Arrow data.
 
 The sibling `../elf_torch/` checkout and `../papers/` directory are reference
 materials only. They are intentionally not tracked by this repository.
+
+## ELF-B 100-caption overfit experiment
+
+The ELF PyTorch training implementation required by this experiment is
+vendored under `elf/`; no sibling checkout, submodule, or runtime clone is
+required. Its provenance and local changes are documented in
+`elf/UPSTREAM.md`, and the upstream MIT license is retained in `elf/LICENSE`.
+
+Install the server training environment:
+
+```bash
+conda create -n elf-cap python=3.10 -y
+conda activate elf-cap
+pip install -r requirements-train.txt
+```
+
+The experiment uses the ELF-B OpenWebText checkpoint only to initialize model
+parameters. It intentionally resets optimizer, scheduler, RNG counters, step,
+and epoch before AudioCaps domain adaptation. Run the complete workflow on one
+4090 with:
+
+```bash
+bash scripts/run_caption_overfit_100.sh
+```
+
+The workflow:
+
+1. deterministically selects 100 captions from the prepared training Arrow
+   dataset with seed 42;
+2. saves the exact selected references and source indices;
+3. initializes local ELF-B from
+   `embedded-language-flows/ELF-B-owt-torch`;
+4. trains for 100 epochs (1,000 steps at batch size 10) with tqdm progress;
+5. saves checkpoints and generates 100 captions every 20 epochs;
+6. captures the training log and analyzes all generated checkpoints against
+   the 100 training captions.
+
+Useful server overrides include:
+
+```bash
+NUM_WORKERS=16 bash scripts/run_caption_overfit_100.sh
+
+EPOCHS=200 GLOBAL_BATCH_SIZE=10 \
+  bash scripts/run_caption_overfit_100.sh
+```
+
+The default outputs are:
+
+```text
+outputs/experiments/elf_caption_overfit_100/
+├── data/
+│   ├── train/
+│   ├── references.jsonl
+│   └── summary.json
+├── train/
+│   ├── checkpoint_*
+│   └── sde-*/all_generated_*.jsonl
+├── train.log
+└── analysis/
+    ├── analysis.json
+    ├── metrics.csv
+    └── loss_curve.csv
+```
+
+Rerunning with existing checkpoints uses ELF's normal auto-resume behavior.
+Set `REBUILD_DATA=1` only when the deterministic 100-caption subset should be
+rebuilt. Use a different `EXPERIMENT_ROOT` for an independent run rather than
+mixing checkpoints:
+
+```bash
+EXPERIMENT_ROOT=outputs/experiments/elf_caption_overfit_100_seed2 \
+  bash scripts/run_caption_overfit_100.sh
+```
+
+The lexical analysis reports non-empty rate, unique ratio, exact training-text
+match rate, training-caption coverage, nearest-reference similarity, length,
+and repeated-bigram rate. These are diagnostics for a small-data overfit test,
+not final Audio Captioning metrics such as CIDEr, SPICE, SPIDEr, or FENSE.

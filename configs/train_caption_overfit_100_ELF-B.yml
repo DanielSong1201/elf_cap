@@ -1,0 +1,82 @@
+# 100-caption sanity experiment: unconditional AudioCaps caption generation.
+
+# Dataset created by scripts/build_caption_overfit_subset.py
+data_path: outputs/experiments/elf_caption_overfit_100/data/train
+eval_data_path: null
+max_length: 48
+pad_token: pad
+
+# Must match the ELF-B OpenWebText checkpoint and preprocessing tokenizer.
+tokenizer_name: t5-small
+encoder_model_name: t5-small
+encoder_checkpoint: null
+latent_mean: 0.0
+latent_std: 0.2
+
+# Initialize model parameters only. Optimizer, scheduler, step and epoch reset.
+init_checkpoint: embedded-language-flows/ELF-B-owt-torch
+resume: null
+
+model: ELF-B
+bottleneck_dim: 128
+num_time_tokens: 4
+num_self_cond_cfg_tokens: 4
+num_model_mode_tokens: 4
+attn_dropout: 0.0
+proj_dropout: 0.0
+
+denoiser_p_mean: -1.5
+denoiser_p_std: 0.8
+denoiser_noise_scale: 2.0
+t_eps: 0.05
+time_schedule: logit_normal
+
+decoder_prob: 0.2
+decoder_noise_scale: 5.0
+decoder_p_mean: 0.8
+decoder_p_std: 0.8
+
+label_drop_prob: 0.0
+self_cond_prob: 0.5
+self_cond_cfg_min: 0.5
+self_cond_cfg_max: 5.0
+
+# 100 examples / batch 10 = 10 training steps per epoch, 1000 total steps.
+epochs: 100
+global_batch_size: 10
+batch_size: null
+grad_accum_steps: 1
+lr: 0.0001
+blr: 0.001
+min_lr: 0.0
+lr_schedule: constant
+warmup_steps: 50
+warmup_epochs: null
+optimizer: adamw
+weight_decay: 0.0
+adam_b1: 0.9
+adam_b2: 0.95
+
+ema_decay1: 0.9999
+
+sampling_configs_path: configs/sampling_caption_overfit.yml
+num_samples: 100
+online_eval: false
+
+log_freq: 10
+save_freq: 20
+eval_freq: 20
+
+output_dir: outputs/experiments/elf_caption_overfit_100/train
+hf_repo_id: null
+
+use_wandb: false
+wandb_project: elf-cap
+wandb_entity: null
+wandb_run_name: elf-b-audiocaps-overfit-100
+
+use_bf16: true
+use_compile: false
+gradient_checkpointing: false
+seed: 42
+num_workers: 8

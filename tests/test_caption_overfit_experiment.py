@@ -48,6 +48,18 @@ class CaptionOverfitExperimentTest(unittest.TestCase):
         positions = DIAGNOSTICS.first_eos_positions(ids, eos_id=1)
         self.assertEqual(positions.tolist(), [1, 2, -1])
 
+    def test_diagnostic_batch_conversion_accepts_numpy_arrays(self) -> None:
+        import numpy as np
+        import torch
+
+        value = np.array([[1, 2], [3, 4]], dtype=np.int64)
+        tensor = DIAGNOSTICS.batch_value_to_tensor(
+            value, torch.device("cpu"), dtype=torch.long
+        )
+        self.assertIsInstance(tensor, torch.Tensor)
+        self.assertEqual(tensor.dtype, torch.long)
+        self.assertEqual(tensor.tolist(), value.tolist())
+
     def test_diagnostic_launcher_calls_three_independent_scripts(self) -> None:
         launcher = (REPO_ROOT / "scripts" / "run_caption_diagnostics.sh").read_text(
             encoding="utf-8"

@@ -226,6 +226,14 @@ def first_eos_positions(ids: torch.Tensor, eos_id: int) -> torch.Tensor:
     return torch.where(eos.any(dim=1), positions, torch.full_like(positions, -1))
 
 
+def batch_value_to_tensor(
+    value: Any, device: torch.device, *, dtype: torch.dtype | None = None
+) -> torch.Tensor:
+    """Move either a NumPy collate value or an existing tensor to a device."""
+    tensor = torch.as_tensor(value)
+    return tensor.to(device=device, dtype=dtype, non_blocking=True)
+
+
 @torch.inference_mode()
 def run_reconstruction_variant(
     *, model, encoder, tokenizer, dataset, config, device, batch_size, num_workers,
@@ -251,9 +259,18 @@ def run_reconstruction_variant(
     offset = 0
     model_dtype = next(model.parameters()).dtype
     for batch in tqdm_class(loader, desc=f"Reconstruct {output_path.parent.name}", unit="batches"):
-        target_ids = batch["input_ids"].to(device).long()
-        attention = batch["attention_mask"].to(device)
-        encoder_attention = batch["encoder_attention_mask"].to(device)
+        # get_dataloader's custom collate function intentionally returns NumPy
+        # arrays. Training calls prepare_batch before device transfer; this
+        # standalone diagnostic performs the equivalent conversion here.
+        target_ids = batch_value_to_tensor(
+            batch["input_ids"], device, dtype=torch.long
+        )
+        attention = batch_value_to_tensor(
+            batch["attention_mask"], device, dtype=torch.float32
+        )
+        encoder_attention = batch_value_to_tensor(
+            batch["encoder_attention_mask"], device, dtype=torch.float32
+        )
         latent = encode_text(
             target_ids,
             encoder_attention,

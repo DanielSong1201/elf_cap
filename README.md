@@ -104,6 +104,73 @@ Run the standard-library tests locally with:
 python -m unittest discover -s tests -v
 ```
 
+## Prepare ELF caption-only data
+
+After building the manifests, install the CPU preprocessing dependencies in
+the ELF conda environment:
+
+```bash
+pip install -r requirements-data.txt
+```
+
+Convert the default AudioCaps v1 manifests into caption-level audit JSONL
+files and tokenized Hugging Face Arrow datasets:
+
+```bash
+python scripts/prepare_elf_caption_data.py \
+  --manifest-dir outputs/manifests/audiocaps_v1 \
+  --output-dir outputs/processed/audiocaps_caption_only \
+  --tokenizer t5-small \
+  --max-length 48
+```
+
+The script uses tqdm progress bars for manifest expansion, JSONL writing,
+tokenization, and Arrow serialization. CPU tokenization is parallel: the
+default `--num-workers 0` automatically selects up to 16 CPU processes. Set an
+explicit value to match the server allocation, for example:
+
+```bash
+python scripts/prepare_elf_caption_data.py \
+  --manifest-dir outputs/manifests/audiocaps_v1 \
+  --output-dir outputs/processed/audiocaps_caption_only \
+  --num-workers 16
+```
+
+The output layout is:
+
+```text
+outputs/processed/audiocaps_caption_only/
+├── train.jsonl
+├── eval.jsonl
+├── test.jsonl
+├── summary.json
+├── tokenizer/
+└── hf_dataset/
+    ├── train/
+    ├── eval/
+    └── test/
+```
+
+Each valid reference caption becomes one example. Captions are whitespace
+normalized, but not lowercased or otherwise rewritten. Empty/non-string and
+within-audio duplicate captions are skipped and reported in `summary.json`.
+The tokenized datasets contain variable-length `input_ids` with T5 EOS and no
+padding; ELF pads dynamically in its dataloader.
+
+The resulting paths can be used in an ELF training config as:
+
+```yaml
+data_path: outputs/processed/audiocaps_caption_only/hf_dataset/train
+eval_data_path: outputs/processed/audiocaps_caption_only/hf_dataset/eval
+encoder_model_name: t5-small
+max_length: 48
+```
+
+The tokenizer must match `encoder_model_name` and the ELF checkpoint. The
+script refuses to replace a non-empty output directory unless `--overwrite`
+is explicitly supplied. Use `--skip-tokenization` only for a lightweight
+caption-expansion check; that mode does not produce ELF-ready Arrow data.
+
 ## Reference code and papers
 
 The sibling `../elf_torch/` checkout and `../papers/` directory are reference

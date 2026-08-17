@@ -324,3 +324,56 @@ The full launcher accepts `EXPERIMENT_ROOT`, `DIAGNOSTIC_OUTPUT`,
 `BATCH_SIZE`, `NUM_WORKERS`, `NUM_SAMPLES`, and `SAMPLING_STEPS` environment
 overrides. Existing result files for the same variant are replaced atomically;
 unrelated output directories are not removed.
+
+### Diagnose flow recovery from controlled noise
+
+The next standalone diagnostic starts from a known mixture of a clean caption
+latent and Gaussian noise,
+
+```text
+z_t = t * x0 + (1 - t) * noise * denoiser_noise_scale,
+```
+
+then integrates the ELF flow from `t` to 1. It compares direct decoding of
+`z_t` with decoding after flow recovery, so decoder robustness is separated
+from flow recovery quality. Run the default checkpoint-1000/raw/ODE sweep with:
+
+```bash
+python scripts/diagnose_flow_recovery.py
+```
+
+The default known-signal fractions are `0, 0.25, 0.5, 0.75, 0.9, 1.0`.
+The `t=0` row is ordinary generation from pure noise; `t=1` is the clean
+latent baseline. Each level reports valid-token latent MSE, cosine similarity,
+relative L2 error both before and after flow, clean/recovered latent
+distribution statistics, token/text reconstruction, EOS behavior, repetition,
+and nearest-reference similarity. Per-caption comparisons are saved under:
+
+```text
+outputs/diagnostics/elf_caption_overfit_100_ema099/04_flow_recovery/
+├── checkpoint_1000/raw/t_*/recoveries.jsonl
+├── metrics.csv
+├── results.json
+└── run_manifest.json
+```
+
+Useful focused comparisons include:
+
+```bash
+# Quick ten-caption server smoke test.
+python scripts/diagnose_flow_recovery.py \
+  --num-samples 10 \
+  --batch-size 5
+
+# Compare training progress while keeping the primary raw parameters.
+python scripts/diagnose_flow_recovery.py \
+  --checkpoint-steps 400 1000
+
+# Explicitly compare raw and EMA recovery at checkpoint 1000.
+python scripts/diagnose_flow_recovery.py \
+  --variants raw ema
+```
+
+The controlled recovery experiment is intentionally not part of
+`run_caption_diagnostics.sh`, because its multi-level flow integrations are
+substantially more expensive than the original three diagnostics.

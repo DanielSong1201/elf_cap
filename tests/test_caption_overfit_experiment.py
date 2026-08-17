@@ -4,12 +4,16 @@ import importlib.util
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_ROOT = REPO_ROOT / "scripts"
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
 
 
 def load_script(name: str):
@@ -24,6 +28,7 @@ def load_script(name: str):
 BUILD = load_script("build_caption_overfit_subset")
 ANALYZE = load_script("analyze_caption_overfit")
 DIAGNOSTICS = load_script("caption_diagnostics_common")
+FLOW_RECOVERY = load_script("diagnose_flow_recovery")
 
 
 def passthrough_tqdm(iterable, **_kwargs):
@@ -31,6 +36,36 @@ def passthrough_tqdm(iterable, **_kwargs):
 
 
 class CaptionOverfitExperimentTest(unittest.TestCase):
+    def test_flow_recovery_times_are_validated_and_sorted(self) -> None:
+        self.assertEqual(
+            FLOW_RECOVERY.validate_start_times([0.9, 0.0, 0.5, 0.5]),
+            [0.0, 0.5, 0.9],
+        )
+        with self.assertRaises(ValueError):
+            FLOW_RECOVERY.validate_start_times([-0.1, 0.5])
+
+    def test_flow_recovery_uniform_steps_have_exact_endpoints(self) -> None:
+        import torch
+
+        steps = FLOW_RECOVERY.build_recovery_steps(
+            0.25, 4, "uniform", None, torch.device("cpu"), torch.float32
+        )
+        self.assertEqual(len(steps), 5)
+        self.assertAlmostEqual(float(steps[0]), 0.25)
+        self.assertAlmostEqual(float(steps[-1]), 1.0)
+        self.assertTrue(bool((steps[1:] > steps[:-1]).all()))
+
+    def test_flow_recovery_latent_metrics_are_exact_for_clean_input(self) -> None:
+        import torch
+
+        target = torch.randn(2, 3, 4)
+        mask = torch.tensor([[1, 1, 0], [1, 1, 1]], dtype=torch.float32)
+        metrics = FLOW_RECOVERY.masked_latent_metrics(target, target, mask)
+        self.assertEqual(metrics["mse"], [0.0, 0.0])
+        self.assertEqual(metrics["relative_l2_error"], [0.0, 0.0])
+        for cosine in metrics["cosine_similarity"]:
+            self.assertAlmostEqual(cosine, 1.0, places=6)
+
     def test_diagnostic_generation_metrics_detect_exact_and_repeated_text(self) -> None:
         result = DIAGNOSTICS.generation_metrics(
             ["A dog barks.", "cat cat cat cat", ""],

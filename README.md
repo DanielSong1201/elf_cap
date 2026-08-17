@@ -263,3 +263,64 @@ The lexical analysis reports non-empty rate, unique ratio, exact training-text
 match rate, training-caption coverage, nearest-reference similarity, length,
 and repeated-bigram rate. These are diagnostics for a small-data overfit test,
 not final Audio Captioning metrics such as CIDEr, SPICE, SPIDEr, or FENSE.
+
+### Diagnose the 100-caption generation failure
+
+After the EMA-0.99 overfit run has produced `checkpoint_400` and
+`checkpoint_1000`, the three experiments can be run independently:
+
+```bash
+python scripts/diagnose_latent_reconstruction.py
+python scripts/diagnose_raw_vs_ema.py
+python scripts/diagnose_sampler_sweep.py
+```
+
+Or run the three independent scripts sequentially with:
+
+```bash
+bash scripts/run_caption_diagnostics.sh
+```
+
+The launcher uses the existing overfit data and checkpoints and writes each
+experiment separately under:
+
+```text
+outputs/diagnostics/elf_caption_overfit_100_ema099/
+├── 01_latent_reconstruction/
+│   ├── raw/reconstructions.jsonl
+│   ├── ema/reconstructions.jsonl
+│   ├── metrics.csv
+│   ├── results.json
+│   └── run_manifest.json
+├── 02_raw_vs_ema/
+│   ├── checkpoint_400/{raw,ema}/generations.jsonl
+│   ├── checkpoint_1000/{raw,ema}/generations.jsonl
+│   ├── metrics.csv
+│   ├── results.json
+│   └── run_manifest.json
+└── 03_sampler_sweep/
+│   ├── checkpoint_400/{ode_*,sde_*}/generations.jsonl
+│   ├── checkpoint_1000/{ode_*,sde_*}/generations.jsonl
+│   ├── metrics.csv
+│   ├── results.json
+│   └── run_manifest.json
+```
+
+The first experiment decodes clean T5 latents and reports token accuracy,
+exact reconstruction, EOS emission, and EOS-position accuracy. The second
+uses identical random seeds to compare raw and EMA parameters under the
+original SDE/SC-CFG=3 sampler. The third uses EMA parameters to compare
+ODE/SDE crossed with SC-CFG values 1 and 3.
+
+To reduce the GPU smoke-test size for one diagnostic:
+
+```bash
+PYTHONPATH="$PWD/elf" python scripts/diagnose_latent_reconstruction.py \
+  --num-samples 10 \
+  --batch-size 5
+```
+
+The full launcher accepts `EXPERIMENT_ROOT`, `DIAGNOSTIC_OUTPUT`,
+`BATCH_SIZE`, `NUM_WORKERS`, `NUM_SAMPLES`, and `SAMPLING_STEPS` environment
+overrides. Existing result files for the same variant are replaced atomically;
+unrelated output directories are not removed.

@@ -23,6 +23,7 @@ def load_script(name: str):
 
 BUILD = load_script("build_caption_overfit_subset")
 ANALYZE = load_script("analyze_caption_overfit")
+DIAGNOSTICS = load_script("caption_diagnostics_common")
 
 
 def passthrough_tqdm(iterable, **_kwargs):
@@ -30,6 +31,32 @@ def passthrough_tqdm(iterable, **_kwargs):
 
 
 class CaptionOverfitExperimentTest(unittest.TestCase):
+    def test_diagnostic_generation_metrics_detect_exact_and_repeated_text(self) -> None:
+        result = DIAGNOSTICS.generation_metrics(
+            ["A dog barks.", "cat cat cat cat", ""],
+            ["A dog barks.", "A cat meows."],
+        )
+        self.assertAlmostEqual(result["nonempty_rate"], 2 / 3)
+        self.assertEqual(result["exact_match_rate"], 0.5)
+        self.assertEqual(result["training_caption_coverage"], 0.5)
+        self.assertEqual(result["repeated_bigram_rate"], 0.5)
+
+    def test_first_eos_positions_marks_missing_eos(self) -> None:
+        import torch
+
+        ids = torch.tensor([[4, 1, 1], [3, 2, 1], [9, 8, 7]])
+        positions = DIAGNOSTICS.first_eos_positions(ids, eos_id=1)
+        self.assertEqual(positions.tolist(), [1, 2, -1])
+
+    def test_diagnostic_launcher_calls_three_independent_scripts(self) -> None:
+        launcher = (REPO_ROOT / "scripts" / "run_caption_diagnostics.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("diagnose_latent_reconstruction.py", launcher)
+        self.assertIn("diagnose_raw_vs_ema.py", launcher)
+        self.assertIn("diagnose_sampler_sweep.py", launcher)
+        self.assertNotIn("scripts/run_caption_diagnostics.py", launcher)
+
     def test_subset_selection_is_deterministic_and_sorted(self) -> None:
         first = BUILD.select_indices(1000, 100, 42)
         second = BUILD.select_indices(1000, 100, 42)
